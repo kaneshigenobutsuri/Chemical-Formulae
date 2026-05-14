@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>化学式フラッシュカード</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #34495e;
+            --bg-color: #ecf0f1;
+            --panel-bg: #ffffff;
+            --text-color: #333333;
+            --card-bg-front: #ffffff;
+            --card-bg-back: #ffffff;
+            --card-text: #333333;
+            --accent-color: #f1c40f;
+            --success-color: #27ae60;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow-x: hidden;
+            /* スワイプ・スクロール許可のため touch-action: none は指定しない */
+        }
+
+        #app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            flex-direction: row;
+        }
+
+        /* 左側：描画キャンバス領域 */
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-color);
+        }
+
+        canvas {
+            display: block;
+            -webkit-tap-highlight-color: transparent; /* タップ時のハイライトを消去 */
+        }
+
+        /* 右側：操作パネル領域 */
+        #control-panel {
+            width: 350px;
+            background-color: var(--panel-bg);
+            padding: 16px 20px; /* 余白を縮小して画面に収める */
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px; /* 要素間の隙間を縮小 */
+            z-index: 10; /* キャンバスより手前 */
+        }
+
+        h2, h3 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 4px; /* 余白を縮小 */
+            margin-bottom: 4px; /* 余白を縮小 */
+        }
+
+        h2 { font-size: 1.4em; }
+        h3 { font-size: 1.1em; }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px; /* 余白を縮小 */
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px; /* 選択肢間の隙間を縮小 */
+            background-color: #f8f9fa;
+            padding: 10px 12px; /* 余白を縮小 */
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            font-size: 15px; /* 文字サイズを微調整 */
+            cursor: pointer;
+            padding: 4px 0; /* 余白を縮小 */
+            user-select: none;
+        }
+
+        input[type="radio"] {
+            margin-right: 10px;
+            width: 20px; /* サイズを微調整 */
+            height: 20px; /* サイズを微調整 */
+            accent-color: var(--primary-color);
+            flex-shrink: 0;
+            margin-top: -2px; /* 複数行になった時の調整 */
+        }
+
+        /* ボタンの立体化と押下アニメーション */
+        button {
+            padding: 12px 16px; /* 余白を縮小 */
+            font-size: 16px; /* 文字サイズを微調整 */
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            min-height: 48px; /* 高さを微調整 */
+            transition: transform 0.1s, box-shadow 0.1s, background-color 0.2s;
+            margin-bottom: 6px; /* 押し込み時のズレを吸収するための余白 */
+            position: relative;
+        }
+
+        #btn-flip {
+            background-color: var(--primary-color);
+            box-shadow: 0 6px 0 #1a252f, 0 8px 10px rgba(0,0,0,0.2);
+        }
+
+        #btn-flip:hover {
+            background-color: var(--secondary-color);
+        }
+
+        #btn-flip:active {
+            transform: translateY(6px);
+            box-shadow: 0 0px 0 #1a252f, 0 2px 3px rgba(0,0,0,0.2);
+        }
+
+        #btn-next {
+            background-color: var(--success-color);
+            box-shadow: 0 6px 0 #1e8449, 0 8px 10px rgba(0,0,0,0.2);
+            display: none; /* 初期状態では非表示。カードをめくったら表示 */
+        }
+
+        #btn-next:hover {
+            background-color: #219653;
+        }
+
+        #btn-next:active {
+            transform: translateY(6px);
+            box-shadow: 0 0px 0 #1e8449, 0 2px 3px rgba(0,0,0,0.2);
+        }
+
+        /* 一覧ボタンのスタイル */
+        #btn-show-list {
+            background-color: #7f8c8d;
+            box-shadow: 0 6px 0 #5f6a6a, 0 8px 10px rgba(0,0,0,0.2);
+            font-size: 15px;
+            padding: 8px 12px;
+            min-height: 44px;
+        }
+
+        #btn-show-list:hover {
+            background-color: #95a5a6;
+        }
+
+        #btn-show-list:active {
+            transform: translateY(6px);
+            box-shadow: 0 0px 0 #5f6a6a, 0 2px 3px rgba(0,0,0,0.2);
+        }
+
+        /* モーダル表示用スタイル */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0,0,0,0.6);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: var(--panel-bg);
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            color: var(--text-color);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #7f8c8d;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .list-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .list-table th, .list-table td {
+            border: 1px solid #ddd;
+            padding: 12px 8px;
+            text-align: left;
+        }
+
+        .list-table th {
+            background-color: #f8f9fa;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        /* 豆知識表示ボックス */
+        #info-box {
+            background-color: #fff9c4;
+            padding: 12px; /* 余白を縮小 */
+            border-radius: 8px;
+            border-left: 6px solid var(--accent-color);
+            display: none; /* 初期状態は非表示 */
+            color: #2f3640;
+            line-height: 1.5;
+            font-size: 14px; /* 文字サイズを微調整 */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        #info-box.visible {
+            display: block;
+            animation: slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hint-text {
+            font-size: 14px;
+            color: #7f8c8d;
+            text-align: center;
+            margin-top: -10px;
+        }
+
+        /* 縦向き時のオーバーレイ */
+        #portrait-warning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: white;
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .rotate-icon {
+            font-size: 48px;
+            animation: rotateDevice 2s infinite;
+        }
+
+        @keyframes rotateDevice {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-90deg); }
+            100% { transform: rotate(-90deg); }
+        }
+
+        @media (orientation: portrait) {
+            #portrait-warning {
+                display: flex;
+            }
+            #app {
+                pointer-events: none;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            #control-panel {
+                width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 描画キャンバス領域 -->
+        <div id="canvas-container">
+            <canvas id="mainCanvas"></canvas>
+        </div>
+
+        <!-- 操作パネル領域 -->
+        <div id="control-panel">
+            <h2>化学式フラッシュカード</h2>
+            
+            <!-- 暗記モード -->
+            <div class="control-group">
+                <h3>暗記モード</h3>
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="mode" value="1" checked> 
+                        物質名 → 化学式
+                    </label>
+                    <label>
+                        <input type="radio" name="mode" value="2"> 
+                        化学式 → 物質名
+                    </label>
+                </div>
+            </div>
+
+            <!-- 4択クイズモード -->
+            <div class="control-group">
+                <h3>4択クイズモード</h3>
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="mode" value="3"> 
+                        物質名 → 化学式
+                    </label>
+                    <label>
+                        <input type="radio" name="mode" value="4"> 
+                        化学式 → 物質名
+                    </label>
+                </div>
+            </div>
+
+            <!-- 表記クイズモード -->
+            <div class="control-group">
+                <h3 style="font-size: 1.05em;">表記クイズ（数字の位置・大文字か小文字かを特訓）</h3>
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="mode" value="5"> 
+                        物質名 → 正しい化学式
+                    </label>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="btn-flip">答えを見る</button>
+                <button id="btn-next">次の問題へ</button>
+                <p class="hint-text">※カードをタップしてもめくれます</p>
+            </div>
+
+            <!-- 豆知識表示エリア -->
+            <div id="info-box">
+                <h3 id="info-title" style="color: #d35400; border-bottom-color: #d35400;">豆知識</h3>
+                <p id="info-text">正解するとここに豆知識が表示されます。</p>
+            </div>
+
+            <div class="control-group">
+                <button id="btn-show-list">化学式一覧を見る</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 化学式一覧モーダル -->
+    <div id="list-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 style="color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 10px; margin-bottom: 15px;">化学式一覧</h2>
+            <div id="list-container"></div>
+        </div>
+    </div>
+
+    <!-- 縦向き警告オーバーレイ -->
+    <div id="portrait-warning">
+        <div class="rotate-icon">📱</div>
+        <p>端末を横向きにして<br>ご使用ください</p>
+    </div>
+
+    <script>
+        // ----------------------------------------------------------------
+        // 物質データ（中学2年理科範囲）
+        // formula: _（アンダースコア）の後の1文字は下付き文字として描画されます
+        // ----------------------------------------------------------------
+        const formulasData = [
+            { formula: 'H_2O', name: '水', decoys: ['h_2O', 'H_2o', 'H^2O', '2HO'], trivia: '水素と酸素が結びついた物質。地球上の生命に欠かせません。' },
+            { formula: 'CO_2', name: '二酸化炭素', decoys: ['Co_2', 'cO_2', 'CO^2', 'C_2O'], trivia: '有機物が燃えたり、生物が呼吸したりするときに発生します。石灰水を白く濁らせます。' },
+            { formula: 'H_2', name: '水素', decoys: ['h_2', 'H^2', '2H', 'H'], trivia: '宇宙で一番多く、一番軽い気体。火を近づけると音を立てて燃え、水になります。' },
+            { formula: 'O_2', name: '酸素', decoys: ['o_2', 'O^2', '2O', 'O'], trivia: 'ものが燃えるのを助ける働き（助燃性）があり、呼吸にも必要です。' },
+            { formula: 'N_2', name: '窒素', decoys: ['n_2', 'N^2', '2N', 'N'], trivia: '空気の約78％を占める気体。他の物質と結びつきにくいため、食品の酸化防止に使われます。' },
+            { formula: 'Cl_2', name: '塩素', decoys: ['CL_2', 'cl_2', 'C_l2', '2Cl'], trivia: '黄緑色で、特有の刺激臭がある有毒な気体。漂白や殺菌の作用があります。' },
+            { formula: 'NH_3', name: 'アンモニア', decoys: ['Nh_3', 'nH_3', 'NH^3', 'N_3H'], trivia: '特有の刺激臭がある気体。水に非常に溶けやすく、水溶液はアルカリ性を示します。' },
+            { formula: 'NaCl', name: '塩化ナトリウム', decoys: ['NaCL', 'nacl', 'Nacl', 'Na_2Cl'], trivia: '食塩の主成分。ナトリウムと塩素が結びついてできています。' },
+            { formula: 'CuO', name: '酸化銅', decoys: ['CUO', 'cuo', 'Cu_2O', 'CuO_2'], trivia: '銅を空気中で加熱するとできる黒色の物質です。' },
+            { formula: 'Ag_2O', name: '酸化銀', decoys: ['AG_2O', 'ag_2O', 'AgO_2', '2AgO'], trivia: '黒色の物質。加熱すると銀と酸素に分解されます。' },
+            { formula: 'MgO', name: '酸化マグネシウム', decoys: ['MGO', 'mgo', 'Mg_2O', 'MgO_2'], trivia: 'マグネシウムが強い光を出して燃えた後にできる白色の物質です。' },
+            { formula: 'FeS', name: '硫化鉄', decoys: ['FES', 'fes', 'Fe_2S', 'FeS_2'], trivia: '鉄と硫黄を混ぜて加熱するとできる黒っぽい物質。うすい塩酸に入れると硫化水素が発生します。' },
+            { formula: 'CuS', name: '硫化銅', decoys: ['CUS', 'cus', 'Cu_2S', 'CuS_2'], trivia: '銅と硫黄が結びついてできる物質です。' },
+            { formula: 'NaHCO_3', name: '炭酸水素ナトリウム', decoys: ['NahCO_3', 'NaHCo_3', 'Na_2CO_3', 'NaHC_o3'], trivia: '重曹（じゅうそう）のこと。加熱すると分解して二酸化炭素が発生するため、カルメ焼きなどに使われます。' },
+            { formula: 'Na_2CO_3', name: '炭酸ナトリウム', decoys: ['Na_2Co_3', 'Na_2C_O3', 'NaHCO_3', 'N_2aCO_3'], trivia: '炭酸水素ナトリウムを加熱したあとに残る白色の物質。水に溶けると強いアルカリ性を示します。' },
+            { formula: 'CuCl_2', name: '塩化銅', decoys: ['Cu_2Cl', 'CuCl^2', 'cuCl_2', 'Cucl_2'], trivia: '水に溶かすと青緑色の水溶液になります。電気分解すると陰極に銅、陽極に塩素が発生します。' },
+            { formula: 'FeO', name: '酸化鉄', decoys: ['Fe_2O_3', 'Fe_3O_4', 'feO', 'FEO'], trivia: '鉄と酸素が結びついてできた物質。鉄のさびなども酸化鉄の一種です。' },
+            { formula: 'Ag', name: '銀', decoys: ['ag', 'AG', 'aG', 'A_g'], trivia: '金属の中で最も電気や熱をよく通します。美しい光沢があり、アクセサリーや鏡の材料などに使われます。' },
+            { formula: 'Cu', name: '銅', decoys: ['cu', 'CU', 'cU', 'C_u'], trivia: '10円玉の材料です。電気をよく通すため、電線などに広く使われています。' },
+            { formula: 'Fe', name: '鉄', decoys: ['fe', 'FE', 'fE', 'F_e'], trivia: '地球上で最も多く利用されている金属です。磁石にくっつく性質があり、建物や自動車など様々なものに使われます。' }
+        ];
+
+        // ----------------------------------------------------------------
+        // 状態管理変数
+        // ----------------------------------------------------------------
+        let currentFormulaIndex = 0;
+        let mode = 1; // 1: 暗記(名->式), 2: 暗記(式->名), 3: クイズ(名->式), 4: クイズ(式->名), 5: 表記クイズ
+        let isFlipped = false;
+        let flipProgress = 0; // 0: 表面, 1: 裏面
+        let isAnimating = false;
+        let animationStartTime = 0;
+        const FLIP_DURATION = 400; // カードめくりアニメーション時間 (ms)
+
+        // 山札（シャッフルされたインデックスのリスト）
+        let deck = [];
+        let deckIndex = 0;
+
+        // クイズモード用の状態
+        let quizOptionsData = []; // 4択のデータ配列
+        let quizButtons = [];     // 描画されたボタンの当たり判定用
+        let feedbackState = 0;    // 0: なし, 1: 正解(◯), 2: 不正解(×)
+        let feedbackTimer = null;
+        let pressedButtonIndex = -1; // 押し込まれているボタンのインデックス
+        
+        let quizQuestionCount = 1;     // クイズの現在の問題番号 (1〜10)
+        let quizCorrectCount = 0;      // クイズの正解数
+        let hasAnsweredThisQuestion = false; // 現在の問題で解答したか
+        let showQuizResult = false;    // 結果表示画面かどうか
+
+        // 山札を初期化してシャッフルする関数
+        function initDeck() {
+            deck = Array.from({length: formulasData.length}, (_, i) => i);
+            shuffleDeck(deck);
+        }
+
+        // 配列をシャッフルする関数 (Fisher-Yates)
+        function shuffleDeck(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // 4択クイズの選択肢を生成する関数
+        function generateQuizOptions() {
+            quizOptionsData = [];
+            const currentData = formulasData[currentFormulaIndex];
+            
+            if (mode === 5) {
+                // 表記クイズ：正解 ＋ ダミー(decoys)
+                quizOptionsData.push({
+                    index: currentFormulaIndex,
+                    text: currentData.formula,
+                    isFormula: true
+                });
+                
+                // decoys からランダムに3つ
+                let decoys = [...currentData.decoys];
+                shuffleDeck(decoys);
+                for(let i=0; i<3; i++) {
+                    if (decoys[i]) {
+                        quizOptionsData.push({
+                            index: -1, // 不正解
+                            text: decoys[i],
+                            isFormula: true
+                        });
+                    }
+                }
+            } else {
+                // 通常のクイズ
+                quizOptionsData.push({
+                    index: currentFormulaIndex,
+                    text: (mode === 3) ? currentData.formula : currentData.name,
+                    isFormula: (mode === 3)
+                });
+                
+                let candidates = [];
+                for (let i = 0; i < formulasData.length; i++) {
+                    if (i !== currentFormulaIndex) candidates.push(i);
+                }
+                shuffleDeck(candidates);
+                
+                for (let i = 0; i < 3; i++) {
+                    const idx = candidates[i];
+                    quizOptionsData.push({
+                        index: idx,
+                        text: (mode === 3) ? formulasData[idx].formula : formulasData[idx].name,
+                        isFormula: (mode === 3)
+                    });
+                }
+            }
+            
+            // 選択肢の並び順をシャッフル
+            shuffleDeck(quizOptionsData);
+        }
+
+        // クイズの状態をリセット
+        function resetQuiz() {
+            quizQuestionCount = 1;
+            quizCorrectCount = 0;
+            hasAnsweredThisQuestion = false;
+            showQuizResult = false;
+        }
+
+        // ----------------------------------------------------------------
+        // Canvas 設定とリサイズ処理 (Retina対応)
+        // ----------------------------------------------------------------
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        let logicalWidth = 0;
+        let logicalHeight = 0;
+
+        // 角丸四角形を描画する関数（互換性対策）
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            if (width < 2 * radius) radius = width / 2;
+            if (height < 2 * radius) radius = height / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = container.getBoundingClientRect();
+            logicalWidth = rect.width;
+            logicalHeight = rect.height;
+            
+            canvas.style.width = logicalWidth + 'px';
+            canvas.style.height = logicalHeight + 'px';
+            canvas.width = logicalWidth * dpr;
+            canvas.height = logicalHeight * dpr;
+            
+            ctx.resetTransform();
+            ctx.scale(dpr, dpr);
+            draw();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // ----------------------------------------------------------------
+        // 化学式の描画処理（下付き文字のパース）
+        // ----------------------------------------------------------------
+        const FONT_FAMILY = "'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif";
+
+        function drawFormattedText(ctx, text, centerX, centerY, baseFontSize) {
+            ctx.save();
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            
+            let subFontSize = baseFontSize * 0.6;
+            let parts = [];
+            
+            // `_`の次は下付き、`^`の次は上付きとしてパース
+            for (let i = 0; i < text.length; i++) {
+                let char = text[i];
+                if (char === '_') {
+                    i++;
+                    if (i < text.length) parts.push({ text: text[i], type: 'sub' });
+                } else if (char === '^') {
+                    i++;
+                    if (i < text.length) parts.push({ text: text[i], type: 'sup' });
+                } else {
+                    parts.push({ text: char, type: 'normal' });
+                }
+            }
+
+            // 全体の幅を計算
+            let totalWidth = 0;
+            for (let p of parts) {
+                ctx.font = `bold ${p.type === 'normal' ? baseFontSize : subFontSize}px ${FONT_FAMILY}`;
+                totalWidth += ctx.measureText(p.text).width;
+            }
+
+            // 中央から描画開始
+            let currentX = centerX - totalWidth / 2;
+            for (let p of parts) {
+                ctx.font = `bold ${p.type === 'normal' ? baseFontSize : subFontSize}px ${FONT_FAMILY}`;
+                let y = centerY;
+                if (p.type === 'sub') y += baseFontSize * 0.25; // 下付き
+                if (p.type === 'sup') y -= baseFontSize * 0.35; // 上付き
+                
+                ctx.fillText(p.text, currentX, y);
+                currentX += ctx.measureText(p.text).width;
+            }
+            ctx.restore();
+        }
+
+        // ----------------------------------------------------------------
+        // UI表示制御
+        // ----------------------------------------------------------------
+        function updateButtonDisplay() {
+            const btnFlip = document.getElementById('btn-flip');
+            const btnNext = document.getElementById('btn-next');
+            const hintText = document.querySelector('.hint-text');
+
+            if (showQuizResult) {
+                btnFlip.style.display = 'none';
+                btnNext.style.display = 'none';
+                hintText.textContent = "※画面をタップして最初からやり直す";
+                return;
+            }
+
+            if (isFlipped) {
+                btnFlip.style.display = 'none';
+                btnNext.style.display = 'block';
+            } else {
+                btnFlip.style.display = (mode === 1 || mode === 2) ? 'block' : 'none';
+                btnNext.style.display = 'none';
+            }
+
+            if (mode === 3 || mode === 4 || mode === 5) {
+                if (isFlipped) {
+                    hintText.textContent = "※カードをタップして次の問題へ";
+                } else {
+                    hintText.textContent = "※選択肢をタップして解答してください";
+                }
+            } else {
+                hintText.textContent = "※カードをタップしてもめくれます";
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // メイン描画処理
+        // ----------------------------------------------------------------
+        function draw() {
+            ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+            // --- クイズ10問終了時の結果画面 ---
+            if (showQuizResult) {
+                const cardWidth = Math.min(logicalWidth * 0.8, 500);
+                const cardHeight = Math.min(logicalHeight * 0.6, 300);
+                const centerX = logicalWidth / 2;
+                const centerY = logicalHeight / 2;
+
+                ctx.save();
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = 20;
+                ctx.shadowOffsetY = 15;
+                ctx.fillStyle = '#ffffff';
+                drawRoundedRect(ctx, centerX - cardWidth / 2, centerY - cardHeight / 2, cardWidth, cardHeight, 24);
+                ctx.shadowColor = 'transparent';
+
+                ctx.fillStyle = '#333333';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                ctx.font = `bold ${Math.min(cardHeight * 0.15, 40)}px ${FONT_FAMILY}`;
+                ctx.fillText('クイズ結果', centerX, centerY - cardHeight * 0.25);
+
+                const rate = Math.floor((quizCorrectCount / 10) * 100);
+                ctx.font = `bold ${Math.min(cardHeight * 0.25, 70)}px ${FONT_FAMILY}`;
+                ctx.fillStyle = '#e74c3c';
+                ctx.fillText(`${rate}%`, centerX, centerY);
+
+                ctx.font = `bold ${Math.min(cardHeight * 0.1, 24)}px ${FONT_FAMILY}`;
+                ctx.fillStyle = '#333333';
+                ctx.fillText(`10問中 ${quizCorrectCount}問 正解！`, centerX, centerY + cardHeight * 0.25);
+
+                ctx.font = `18px ${FONT_FAMILY}`;
+                ctx.fillStyle = '#7f8c8d';
+                ctx.fillText('Tap to Restart ↻', centerX, centerY + cardHeight * 0.4);
+                
+                ctx.restore();
+                return;
+            }
+
+            // --- 通常のカード描画 ---
+            const angle = flipProgress * Math.PI; 
+            const scaleX = Math.cos(angle);       
+            const isShowingBack = flipProgress >= 0.5;
+
+            let currentCardHeightRatio = 0.6;
+            let currentCenterY = logicalHeight / 2;
+
+            if (mode === 3 || mode === 4 || mode === 5) {
+                if (!isAnimating && !isFlipped) {
+                    currentCardHeightRatio = 0.45;
+                    currentCenterY = logicalHeight * 0.35;
+                } else if (!isAnimating && isFlipped) {
+                    currentCardHeightRatio = 0.6;
+                    currentCenterY = logicalHeight / 2;
+                } else if (isAnimating) {
+                    const t = flipProgress;
+                    currentCardHeightRatio = 0.45 + (0.6 - 0.45) * t;
+                    currentCenterY = (logicalHeight * 0.35) + (logicalHeight / 2 - logicalHeight * 0.35) * t;
+                }
+            }
+
+            const cardWidth = Math.min(logicalWidth * 0.8, 500);
+            const cardHeight = Math.min(logicalHeight * currentCardHeightRatio, 300);
+            const centerX = logicalWidth / 2;
+            const centerY = currentCenterY;
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.scale(scaleX, 1);
+
+            ctx.fillStyle = '#ffffff';
+            
+            if (!isAnimating) {
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = 20;
+                ctx.shadowOffsetY = 15;
+            } else {
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+                ctx.shadowBlur = 30;
+                ctx.shadowOffsetY = 5;
+            }
+
+            drawRoundedRect(ctx, -cardWidth / 2, -cardHeight / 2, cardWidth, cardHeight, 24);
+            ctx.shadowColor = 'transparent';
+
+            const currentData = formulasData[currentFormulaIndex];
+            let displayText = '';
+            let isFormulaMode = false;
+
+            if (mode === 1 || mode === 3 || mode === 5) { 
+                // 物質名 → 化学式
+                displayText = isShowingBack ? currentData.formula : currentData.name;
+                isFormulaMode = isShowingBack;
+            } else { 
+                // 化学式 → 物質名
+                displayText = isShowingBack ? currentData.name : currentData.formula;
+                isFormulaMode = !isShowingBack;
+            }
+
+            if (scaleX < 0) ctx.scale(-1, 1);
+
+            if (mode === 3 || mode === 4 || mode === 5) {
+                ctx.font = `bold 16px ${FONT_FAMILY}`;
+                ctx.fillStyle = '#bdc3c7';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(`Q. ${quizQuestionCount} / 10`, -cardWidth / 2 + 20, -cardHeight / 2 + 20);
+            }
+
+            ctx.fillStyle = '#333333';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            let mainFontSize = 0;
+            if (isFormulaMode) {
+                mainFontSize = Math.min(cardHeight * 0.45, 110);
+            } else {
+                let baseSize = 80;
+                if (displayText.length >= 6) baseSize = 50;
+                else if (displayText.length >= 4) baseSize = 65;
+                mainFontSize = Math.min(cardHeight * 0.35, baseSize);
+            }
+
+            // テキストの描画（化学式ならパースして描画）
+            if (isFormulaMode) {
+                drawFormattedText(ctx, displayText, 0, 0, mainFontSize);
+            } else {
+                ctx.font = `bold ${mainFontSize}px ${FONT_FAMILY}`;
+                ctx.fillText(displayText, 0, 0);
+            }
+
+            if ((mode === 1 || mode === 2) && !isShowingBack && !isAnimating) {
+                ctx.font = `18px ${FONT_FAMILY}`;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillText('Tap to Flip ↻', 0, cardHeight / 2 - 30);
+            }
+
+            ctx.restore();
+
+            // --- クイズの選択肢ボタン描画 ---
+            if ((mode === 3 || mode === 4 || mode === 5) && !isShowingBack && !isAnimating) {
+                const btnWidth = Math.min(logicalWidth * 0.4, 240);
+                const btnHeight = Math.min(logicalHeight * 0.15, 60);
+                const gapX = Math.min(logicalWidth * 0.05, 20);
+                const gapY = 15;
+                const startY = centerY + cardHeight / 2 + Math.min(logicalHeight * 0.05, 30);
+                
+                quizButtons = [];
+                for(let i = 0; i < 4; i++) {
+                    const row = Math.floor(i / 2);
+                    const col = i % 2;
+                    const bx = logicalWidth / 2 + (col === 0 ? -btnWidth - gapX/2 : gapX/2);
+                    const by = startY + row * (btnHeight + gapY);
+                    
+                    quizButtons.push({
+                        x: bx, y: by, w: btnWidth, h: btnHeight,
+                        text: quizOptionsData[i].text,
+                        elementIndex: quizOptionsData[i].index,
+                        isFormula: quizOptionsData[i].isFormula
+                    });
+                    
+                    const radius = btnHeight / 2;
+                    const isPressed = (i === pressedButtonIndex);
+                    const drawY = isPressed ? by + 4 : by;
+                    
+                    ctx.fillStyle = '#636e72';
+                    if (!isPressed) drawRoundedRect(ctx, bx, by + 4, btnWidth, btnHeight, radius);
+
+                    ctx.fillStyle = '#7f8c8d'; 
+                    drawRoundedRect(ctx, bx, drawY, btnWidth, btnHeight, radius);
+
+                    ctx.fillStyle = '#ffffff';
+                    const text = quizOptionsData[i].text;
+                    const isFormula = quizOptionsData[i].isFormula;
+                    
+                    let btnFontSize = btnHeight * 0.4;
+                    if (isFormula) {
+                        btnFontSize = btnHeight * 0.5;
+                    } else if (text.length > 4) {
+                        btnFontSize = btnHeight * 0.3;
+                    }
+
+                    if (isFormula) {
+                        drawFormattedText(ctx, text, bx + btnWidth/2, drawY + btnHeight/2, btnFontSize);
+                    } else {
+                        ctx.font = `bold ${btnFontSize}px ${FONT_FAMILY}`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(text, bx + btnWidth/2, drawY + btnHeight/2);
+                    }
+                }
+            }
+
+            // --- クイズの正誤フィードバック描画 ---
+            if (feedbackState === 1) {
+                ctx.strokeStyle = '#e74c3c';
+                ctx.lineWidth = Math.max(10, Math.min(logicalWidth, logicalHeight) * 0.03);
+                ctx.beginPath();
+                ctx.arc(logicalWidth/2, logicalHeight/2, Math.min(logicalWidth, logicalHeight)*0.25, 0, Math.PI*2);
+                ctx.stroke();
+            } else if (feedbackState === 2) {
+                ctx.strokeStyle = '#3498db';
+                ctx.lineWidth = Math.max(10, Math.min(logicalWidth, logicalHeight) * 0.03);
+                const size = Math.min(logicalWidth, logicalHeight)*0.2;
+                ctx.beginPath();
+                ctx.moveTo(logicalWidth/2 - size, logicalHeight/2 - size);
+                ctx.lineTo(logicalWidth/2 + size, logicalHeight/2 + size);
+                ctx.moveTo(logicalWidth/2 + size, logicalHeight/2 - size);
+                ctx.lineTo(logicalWidth/2 - size, logicalHeight/2 + size);
+                ctx.stroke();
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // アニメーション・操作処理
+        // ----------------------------------------------------------------
+        function updateAnimation(timestamp) {
+            if (!isAnimating) return;
+
+            if (!animationStartTime) animationStartTime = timestamp;
+            const elapsed = timestamp - animationStartTime;
+            
+            let progress = elapsed / FLIP_DURATION;
+            if (progress > 1) progress = 1;
+            
+            const easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+            if (isFlipped) flipProgress = easeProgress;
+            else flipProgress = 1 - easeProgress;
+
+            draw();
+
+            if (progress < 1) {
+                requestAnimationFrame(updateAnimation);
+            } else {
+                isAnimating = false;
+                animationStartTime = 0;
+                
+                const infoBox = document.getElementById('info-box');
+                if (isFlipped) {
+                    infoBox.classList.add('visible');
+                    document.getElementById('info-text').textContent = formulasData[currentFormulaIndex].trivia;
+                } else {
+                    infoBox.classList.remove('visible');
+                }
+                
+                updateButtonDisplay();
+                draw();
+            }
+        }
+
+        function triggerFlip() {
+            if (isAnimating) return;
+            if (isFlipped) {
+                nextQuestion();
+                return;
+            }
+            isFlipped = true;
+            isAnimating = true;
+            requestAnimationFrame(updateAnimation);
+        }
+
+        function nextQuestion() {
+            if (isAnimating) return;
+
+            if ((mode === 3 || mode === 4 || mode === 5) && !showQuizResult) {
+                if (quizQuestionCount >= 10) {
+                    showQuizResult = true;
+                    document.getElementById('info-box').classList.remove('visible');
+                    updateButtonDisplay();
+                    draw();
+                    return;
+                } else {
+                    quizQuestionCount++;
+                    hasAnsweredThisQuestion = false;
+                }
+            }
+            
+            deckIndex++;
+            if (deckIndex >= deck.length) {
+                const lastIndex = deck[deck.length - 1];
+                shuffleDeck(deck);
+                if (deck[0] === lastIndex && deck.length > 1) {
+                    [deck[0], deck[1]] = [deck[1], deck[0]];
+                }
+                deckIndex = 0;
+            }
+            
+            currentFormulaIndex = deck[deckIndex];
+            
+            if (mode === 3 || mode === 4 || mode === 5) {
+                generateQuizOptions();
+            }
+            
+            isFlipped = false;
+            flipProgress = 0;
+            feedbackState = 0;
+            pressedButtonIndex = -1;
+            
+            document.getElementById('info-box').classList.remove('visible');
+            updateButtonDisplay();
+            draw();
+        }
+
+        // ----------------------------------------------------------------
+        // イベントリスナー設定
+        // ----------------------------------------------------------------
+        document.getElementById('btn-flip').addEventListener('click', triggerFlip);
+        document.getElementById('btn-next').addEventListener('click', nextQuestion);
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (isAnimating || feedbackState !== 0) return;
+
+            if (showQuizResult) {
+                resetQuiz();
+                deckIndex++;
+                if (deckIndex >= deck.length) {
+                    shuffleDeck(deck);
+                    deckIndex = 0;
+                }
+                currentFormulaIndex = deck[deckIndex];
+                generateQuizOptions();
+                
+                isFlipped = false;
+                flipProgress = 0;
+                feedbackState = 0;
+                pressedButtonIndex = -1;
+                
+                updateButtonDisplay();
+                draw();
+                return;
+            }
+
+            if (mode === 1 || mode === 2) {
+                const cardWidth = Math.min(logicalWidth * 0.8, 500);
+                const cardHeight = Math.min(logicalHeight * 0.6, 300);
+                const centerX = logicalWidth / 2;
+                const centerY = logicalHeight / 2;
+                if (x >= centerX - cardWidth / 2 && x <= centerX + cardWidth / 2 && 
+                    y >= centerY - cardHeight / 2 && y <= centerY + cardHeight / 2) {
+                    triggerFlip();
+                }
+            } else {
+                if (isFlipped) {
+                    const cardWidth = Math.min(logicalWidth * 0.8, 500);
+                    const cardHeight = Math.min(logicalHeight * 0.6, 300);
+                    const centerX = logicalWidth / 2;
+                    const centerY = logicalHeight / 2;
+                    if (x >= centerX - cardWidth / 2 && x <= centerX + cardWidth / 2 && 
+                        y >= centerY - cardHeight / 2 && y <= centerY + cardHeight / 2) {
+                        triggerFlip(); 
+                    }
+                    return; 
+                }
+
+                for (let i = 0; i < quizButtons.length; i++) {
+                    const b = quizButtons[i];
+                    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                        pressedButtonIndex = i;
+
+                        if (!hasAnsweredThisQuestion) {
+                            hasAnsweredThisQuestion = true;
+                            if (b.elementIndex === currentFormulaIndex) {
+                                quizCorrectCount++;
+                            }
+                        }
+
+                        if (b.elementIndex === currentFormulaIndex) {
+                            feedbackState = 1;
+                            draw();
+                            setTimeout(() => {
+                                feedbackState = 0;
+                                pressedButtonIndex = -1;
+                                triggerFlip();
+                            }, 600);
+                        } else {
+                            feedbackState = 2;
+                            draw();
+                            if (feedbackTimer) clearTimeout(feedbackTimer);
+                            feedbackTimer = setTimeout(() => {
+                                feedbackState = 0;
+                                pressedButtonIndex = -1;
+                                triggerFlip();
+                            }, 600);
+                        }
+                        break;
+                    }
+                }
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            let isPointer = false;
+
+            if (showQuizResult) {
+                isPointer = true;
+            } else if (mode === 1 || mode === 2) {
+                const cardWidth = Math.min(logicalWidth * 0.8, 500);
+                const cardHeight = Math.min(logicalHeight * 0.6, 300);
+                const centerX = logicalWidth / 2;
+                const centerY = logicalHeight / 2;
+                if (x >= centerX - cardWidth / 2 && x <= centerX + cardWidth / 2 && 
+                    y >= centerY - cardHeight / 2 && y <= centerY + cardHeight / 2) {
+                    isPointer = true;
+                }
+            } else {
+                if (isFlipped) {
+                    const cardWidth = Math.min(logicalWidth * 0.8, 500);
+                    const cardHeight = Math.min(logicalHeight * 0.6, 300);
+                    const centerX = logicalWidth / 2;
+                    const centerY = logicalHeight / 2;
+                    if (x >= centerX - cardWidth / 2 && x <= centerX + cardWidth / 2 && 
+                        y >= centerY - cardHeight / 2 && y <= centerY + cardHeight / 2) {
+                        isPointer = true;
+                    }
+                } else if (feedbackState === 0 && !isAnimating) {
+                    for (let i = 0; i < quizButtons.length; i++) {
+                        const b = quizButtons[i];
+                        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                            isPointer = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            canvas.style.cursor = isPointer ? 'pointer' : 'default';
+        });
+
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                mode = parseInt(e.target.value);
+                
+                if (mode === 3 || mode === 4 || mode === 5) {
+                    resetQuiz();
+                    generateQuizOptions();
+                } else {
+                    showQuizResult = false;
+                }
+                
+                isFlipped = false;
+                flipProgress = 0;
+                feedbackState = 0;
+                pressedButtonIndex = -1;
+                
+                document.getElementById('info-box').classList.remove('visible');
+                updateButtonDisplay();
+                draw();
+            });
+        });
+
+        // ----------------------------------------------------------------
+        // 初期化処理
+        // ----------------------------------------------------------------
+        initDeck();
+        currentFormulaIndex = deck[deckIndex];
+        if (mode === 3 || mode === 4 || mode === 5) {
+            resetQuiz();
+            generateQuizOptions();
+        }
+        updateButtonDisplay();
+        resizeCanvas();
+
+        // ----------------------------------------------------------------
+        // 一覧表示モーダルの処理
+        // ----------------------------------------------------------------
+        function formatFormulaHTML(formula) {
+            let html = '';
+            for (let i = 0; i < formula.length; i++) {
+                if (formula[i] === '_') {
+                    i++;
+                    if (i < formula.length) html += `<sub>${formula[i]}</sub>`;
+                } else if (formula[i] === '^') {
+                    i++;
+                    if (i < formula.length) html += `<sup>${formula[i]}</sup>`;
+                } else {
+                    html += formula[i];
+                }
+            }
+            return html;
+        }
+
+        const modal = document.getElementById('list-modal');
+        const btnShowList = document.getElementById('btn-show-list');
+        const closeBtn = document.querySelector('.close-btn');
+        const listContainer = document.getElementById('list-container');
+
+        btnShowList.addEventListener('click', () => {
+            let tableHTML = '<table class="list-table"><tr><th>物質名</th><th>化学式</th></tr>';
+            formulasData.forEach(item => {
+                tableHTML += `<tr><td>${item.name}</td><td style="font-size: 1.2em; font-weight: bold; font-family: ${FONT_FAMILY};">${formatFormulaHTML(item.formula)}</td></tr>`;
+            });
+            tableHTML += '</table>';
+            listContainer.innerHTML = tableHTML;
+            modal.classList.add('show');
+        });
+
+        closeBtn.addEventListener('click', () => {
+            modal.classList.remove('show');
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('show');
+            }
+        });
+
+    </script>
+</body>
+</html>
